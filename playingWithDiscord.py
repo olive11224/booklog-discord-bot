@@ -1,9 +1,16 @@
+#Cat Photos from https://github.com/AtharvaTaras/Cat-Images-Dataset
 import discord
 from discord.ext import commands
 import json
 import os
+from datetime import datetime, date
+import calendar
+import random
 
 sampleJSON = 'C:/Users/Computer/Downloads/PythonScripts/sampleJSON.json'
+catPhotosFolder = 'C:/Users/Computer/Downloads/Cat-Images-Dataset-master'
+catPhotos = os.listdir(folder)
+
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -20,6 +27,8 @@ def load_data():
 def save_data(data):
     with open(sampleJSON, 'w') as f:
         json.dump(data, f, indent=2)
+
+#BASIC COMMANDS
 
 @bot.command(help = 'Register a booklog for yourself.')
 async def register(ctx):
@@ -71,134 +80,23 @@ async def addBook(ctx, *, args):
         })
         save_data(data)
         await ctx.send(f"Book '{title}' added for user {username}.")
+        if endDate != '' and data[username]['reading goal deadline']:
+            deadline = data[username]['reading goal deadline']
+            booksInDateRange = [book for book in data[username][books] if book['end date'][:7] == deadline[:7]]
+            if len(booksInDateRange) >= data[username]['reading goal']:
+                randomCatPhoto = random.choice(catPhotos)
+                imagePath = os.path.join(catPhotosFolder, randomCatPhoto)
+                await ctx.send(f"{username} has reached their monthly reading goal! 🎉🎉🎉")
+                await ctx.send(file=discord.File(imagePath))
+                del data[username]['reading goal']
+                del data[username]['reading goal deadline']
+                save_data(data)
+                await ctx.send(f"The reading goal for this month has been removed. See you next month!")
+            
     except Exception as e:
         await ctx.send(f"❌ {e}")
 
-@bot.command(help = 'Get the number of books on your or someone else\'s book log.')
-async def getNumberofBooks(ctx, username = ''):
-    """
-    Write either `!getNumberofBooks` to get the number of books in your own booklog or `!get NumberofBooks <username>` to get someone else's.
-    """
-    if username == '':
-        username = ctx.author.name
-    try:
-        data = load_data()
-        number = len(data[username]['books'])
-        book_word = 'book' if number == 1 else 'books'
-        await ctx.send(f"{username} has read {number} {book_word}.")
-    except Exception as e:
-        await ctx.send(f"❌ {e}")
-
-@bot.command(help = 'Get the number of books you or someone else has finished reading.')
-async def getNumberCompletedBooks(ctx, username = ''):
-    """
-    Write either `!getNumberofBooks` to get the number of books you have read or `!get NumberofBooks <username>` for someone else.
-    """
-    if username == '':
-        username = ctx.author.name
-    try:
-        data = load_data()
-        number = len([p for p in data[username]['books'] if p['end date'] != ''])
-        book_word = 'book' if number == 1 else 'books'
-        await ctx.send(f"{username} has finished reading {number} {book_word}.")
-    except Exception as e:
-        await ctx.send(f"❌ {e}")
-
-@bot.command(help = 'Provide a date by which you finished a book.')
-async def finishBook(ctx, *, args):
-    """
-        Format `!finishBook <title>, <endDate>, <author>`.
-
-        Example: `!finishBook The Idiot, 2025-06-12, Fyodor Dostoyevsky`
-    """
-    try:
-        username = ctx.author.name
-        parts = [p.strip() for p in args.split(',')]
-        if len(parts) != 3:
-            raise Exception('Not the correct number of arguments.')
-        title = parts[0]
-        endDate = parts[1]
-        author = parts[2]
-        data = load_data()
-        candidates = [d for d in data[username]['books'] if d.get('title') == title]
-        if not candidates: #What happens if there is no book under that title
-            raise Exception('This book is not currently logged.')
-        titled = [d for d in candidates if d.get('author') == author] 
-        if not titled: #What happened if there is no titled book under that title
-            book = next(d for d in data[username]['books'] if d['title'] == title)
-            book['author'] = author
-            book['end date'] = endDate
-            msg = f"This book was not previously assigned an author. Assigning {author} and the end date {endDate}."
-        else: #Assign end date normally
-            book = titled[0]
-            book['end date'] = endDate
-            msg = f"You finished {title} on {endDate}. Congratulations!"
-        save_data(data)
-        await ctx.send(msg)
-    except Exception as e:
-        await ctx.send(f"❌ {e}")
-
-@bot.command(help = 'Add an author to a book title you have not previously done so to.')
-async def addAuthor(ctx, *, args):
-    """
-        Add or overwrite the author of a book. Format as `!addAuthor <title>, <author>`, as in `!addAuthor The Idiot, Fyodor Dostoyevsky`.
-    """
-    try:
-        username = ctx.author.name
-        parts = [p.strip() for p in args.split(',')]
-        title = parts[0] 
-        author = parts[1] 
-        data = load_data()
-        booksWithTitle = [d for d in data[username]['books'] if d['title'] == title]
-        if not booksWithTitle:
-            raise Exception('No books by this title found.')
-        if len(booksWithTitle) > 1:
-            raise Exception('Multiple books with this title. Cannot resolve.')
-        old_author = booksWithTitle[0].get('author', '') #Saves the old author, giving an empty string if there isn't any.
-        booksWithTitle[0]['author'] = author #Updates author
-        save_data(data)
-        if old_author:
-            await ctx.send(f"Changed author of '{title}' from {old_author} to {author}.")
-        else:
-            await ctx.send(f"Set author of '{title}' to {author}.")
-    except Exception as e:
-        await ctx.send(f"❌ {e}")
-
-@bot.command(help = 'Get descriptions of each book in someone\'s book log.')
-async def getBooks(ctx, username = ''):
-    '''
-        If you want to get your own book log data, simply type `!getBooks`. 
-        Otherwise, specify a username with `!getBooks <username>`.
-    '''
-    try:
-        if username == '':
-            username = ctx.author.name
-        data = load_data()
-        books = data[username]['books']
-        if not books:
-            await ctx.send(f"{username} has not read any books yet!")
-            return
-        messages = [f'These are the books read or being read by {username}. \n']
-        for i, book in enumerate(books, 1):
-            #messages.append(f"{i}. {book['title']} by {book['author']}, with {book['page count']} pages. Started {book['start date']} and ended {book['end date']}.")
-            messages.append(f"{i}. {book['title']}")
-            if book['author']:
-                messages.append(f" by {book['author']}")
-            if book['page count']:
-                messages.append(f", with {book['page count']} pages")
-            messages.append(f".")
-            if book['start date'] and book['end date']:
-                messages.append(f"Started {book['start date']} and ended {book['end date']}.")
-            elif book['start date']:
-                messages.append(f"Started {book['start date']}.")
-            elif book['end date']:
-                messages.append(f"Ended {book['end date']}.")
-            messages.append('\n')
-        await ctx.send(''.join(messages))
-    except Exception as e:
-        await ctx.send(f"❌ {e}")
-
-@bot.command(help='Remove a book from your bookLog.')
+@bot.command(help='Remove a book from your book ךog.')
 async def removeBook(ctx, *, args):
     '''Use either `!removeBook <title>` or `!removeBook <title>, <author>` to remove a book from your bookLog.
     '''
@@ -239,6 +137,116 @@ async def removeBook(ctx, *, args):
     except Exception as e:
         await ctx.send(f"❌ {e}")
 
+#READING GOAL RELATED
+@bot.command(help = 'Add or change your personal monthly reading goal.')
+async def addReadingGoal(ctx, readingGoal):
+    '''
+    Use `!addReadingGoal <# of books>` to add/update your monthly reading goal.
+    '''
+    try:
+        data = load_data()
+        username = ctx.author.name
+        data[username]['reading goal'] = readingGoal
+        today = datetime.today()
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        readingGoalDeadline = date(today.year, today.month, last_day)
+        data[username]['reading goal deadline'] = readingGoalDeadline
+        save_data(data)
+        await ctx.send(f'You will work toward reading {readingGoal} books by {readingGoalDeadline}.')
+    except Exception as e:
+        await ctx.send(f"❌ {e}")
+
+#INFORMATIONAL COMMANDS
+@bot.command(help = 'Get the number of books on your or someone else\'s book log.')
+async def getNumberofBooks(ctx, username = ''):
+    """
+    Write either `!getNumberofBooks` to get the number of books in your own booklog or `!get NumberofBooks <username>` to get someone else's.
+    """
+    if username == '':
+        username = ctx.author.name
+    try:
+        data = load_data()
+        number = len(data[username]['books'])
+        book_word = 'book' if number == 1 else 'books'
+        await ctx.send(f"{username} has read {number} {book_word}.")
+    except Exception as e:
+        await ctx.send(f"❌ {e}")
+
+@bot.command(help = 'Get the number of books you or someone else has finished reading.')
+async def getNumberCompletedBooks(ctx, username = ''):
+    """
+    Write either `!getNumberofBooks` to get the number of books you have read or `!get NumberofBooks <username>` for someone else.
+    """
+    if username == '':
+        username = ctx.author.name
+    try:
+        data = load_data()
+        number = len([p for p in data[username]['books'] if p['end date'] != ''])
+        book_word = 'book' if number == 1 else 'books'
+        await ctx.send(f"{username} has finished reading {number} {book_word}.")
+    except Exception as e:
+        await ctx.send(f"❌ {e}")
+
+@bot.command(help = 'Get descriptions of each book in someone\'s book log.')
+async def getBooks(ctx, username = ''):
+    '''
+        If you want to get your own book log data, simply type `!getBooks`. 
+        Otherwise, specify a username with `!getBooks <username>`.
+    '''
+    try:
+        if username == '':
+            username = ctx.author.name
+        data = load_data()
+        books = data[username]['books']
+        if not books:
+            await ctx.send(f"{username} has not read any books yet!")
+            return
+        messages = [f'These are the books read or being read by {username}. \n']
+        for i, book in enumerate(books, 1):
+            #messages.append(f"{i}. {book['title']} by {book['author']}, with {book['page count']} pages. Started {book['start date']} and ended {book['end date']}.")
+            messages.append(f"{i}. {book['title']}")
+            if book['author']:
+                messages.append(f" by {book['author']}")
+            if book['page count']:
+                messages.append(f", with {book['page count']} pages")
+            messages.append(f".")
+            if book['start date'] and book['end date']:
+                messages.append(f"Started {book['start date']} and ended {book['end date']}.")
+            elif book['start date']:
+                messages.append(f"Started {book['start date']}.")
+            elif book['end date']:
+                messages.append(f"Ended {book['end date']}.")
+            messages.append('\n')
+        await ctx.send(''.join(messages))
+    except Exception as e:
+        await ctx.send(f"❌ {e}")
+
+#UPDATE COMMANDS
+@bot.command(help = 'Add an author to a book title you have not previously done so to.')
+async def addAuthor(ctx, *, args):
+    """
+        Add or overwrite the author of a book. Format as `!addAuthor <title>, <author>`, as in `!addAuthor The Idiot, Fyodor Dostoyevsky`.
+    """
+    try:
+        username = ctx.author.name
+        parts = [p.strip() for p in args.split(',')]
+        title = parts[0] 
+        author = parts[1] 
+        data = load_data()
+        booksWithTitle = [d for d in data[username]['books'] if d['title'] == title]
+        if not booksWithTitle:
+            raise Exception('No books by this title found.')
+        if len(booksWithTitle) > 1:
+            raise Exception('Multiple books with this title. Cannot resolve.')
+        old_author = booksWithTitle[0].get('author', '') #Saves the old author, giving an empty string if there isn't any.
+        booksWithTitle[0]['author'] = author #Updates author
+        save_data(data)
+        if old_author:
+            await ctx.send(f"Changed author of '{title}' from {old_author} to {author}.")
+        else:
+            await ctx.send(f"Set author of '{title}' to {author}.")
+    except Exception as e:
+        await ctx.send(f"❌ {e}")
 
 @bot.command(help='Add a beginning date to a book in your booklog.')
 async def addStartDate(ctx, *, args):
@@ -283,6 +291,52 @@ async def addStartDate(ctx, *, args):
                     await ctx.send(f"You started {title} by {author} on {startDate}")
                 if len(candidateBooksAuthors) > 1:
                     raise Exception('There are somehow multiple books logged with the same title and author.')
+    except Exception as e:
+        await ctx.send(f"❌ {e}")
+
+@bot.command(help = 'Add an ending date to a book in your booklog.')
+async def finishBook(ctx, *, args):
+    """
+        Format `!finishBook <title>, <endDate>, <author>`.
+
+        Example: `!finishBook The Idiot, 2025-06-12, Fyodor Dostoyevsky`
+    """
+    try:
+        username = ctx.author.name
+        parts = [p.strip() for p in args.split(',')]
+        if len(parts) != 3:
+            raise Exception('Not the correct number of arguments.')
+        title = parts[0]
+        endDate = parts[1]
+        author = parts[2]
+        data = load_data()
+        candidates = [d for d in data[username]['books'] if d.get('title') == title]
+        if not candidates: #What happens if there is no book under that title
+            raise Exception('This book is not currently logged.')
+        titled = [d for d in candidates if d.get('author') == author] 
+        if not titled: #What happened if there is no titled book under that title
+            book = next(d for d in data[username]['books'] if d['title'] == title)
+            book['author'] = author
+            book['end date'] = endDate
+            msg = f"This book was not previously assigned an author. Assigning {author} and the end date {endDate}."
+        else: #Assign end date normally
+            book = titled[0]
+            book['end date'] = endDate
+            msg = f"You finished {title} on {endDate}. Congratulations!"
+        save_data(data)
+        if data[username]['reading goal deadline']:
+            deadline = data[username]['reading goal deadline']
+            booksInDateRange = [book for book in data[username][books] if book['end date'][:7] == deadline[:7]]
+            if len(booksInDateRange) >= data[username]['reading goal']:
+                randomCatPhoto = random.choice(catPhotos)
+                imagePath = os.path.join(catPhotosFolder, randomCatPhoto)
+                await ctx.send(f"{username} has reached their monthly reading goal! 🎉🎉🎉")
+                await ctx.send(file=discord.File(imagePath))
+                del data[username]['reading goal']
+                del data[username]['reading goal deadline']
+                save_data(data)
+                await ctx.send(f"The reading goal for this month has been removed. See you next month!")
+        await ctx.send(msg)
     except Exception as e:
         await ctx.send(f"❌ {e}")
 
@@ -340,8 +394,6 @@ async def addPageCount(ctx, *, args):
                     raise Exception('There are multiple books with this title and author in your reading log.')
     except Exception as e:
         await ctx.send(f"❌ {e}")
-
-                
 
 
 @bot.event
