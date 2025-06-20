@@ -2,7 +2,7 @@
 ## Introduction
 This bot serves as an indexer of reading logs. Each member of the server can register a reading log for themself, set a monthly reading goal, and enter books into the log.
 
-##List of Commands
+## List of Commands
 ### Basic Commands
 `!register` registers a blank booklog for the user.
 
