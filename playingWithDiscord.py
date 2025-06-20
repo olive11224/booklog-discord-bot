@@ -7,9 +7,9 @@ from datetime import datetime, date
 import calendar
 import random
 
-sampleJSON = 'C:/Users/Computer/Downloads/PythonScripts/sampleJSON.json'
-catPhotosFolder = 'C:/Users/Computer/Downloads/Cat-Images-Dataset-master'
-catPhotos = os.listdir(folder)
+sampleJSON = '' #Path of JSON file where data is stored
+catPhotosFolder = '' #Path of folder with cat photos to bring burst of dopamine
+catPhotos = os.listdir(catPhotosFolder)
 
 
 intents = discord.Intents.default()
@@ -50,7 +50,7 @@ async def register(ctx):
 @bot.command(help = 'Add a book to your book log.')
 async def addBook(ctx, *, args):
     """
-    Format `!addBook <book name>, <author>, <page count>, <start date>, <end date>`.
+    Format `!addBook <title>, <author>, <page count>, <start date>, <end date>`.
 
     Example:
 
@@ -60,30 +60,31 @@ async def addBook(ctx, *, args):
         username = ctx.author.name
         parts = [p.strip() for p in args.split(',')]
         if len(parts) == 0:
-            raise Exception("You must provide at a title.")
+            raise Exception("You must provide at least a title.")
         title = parts[0]
-        author = parts[1] if len(parts) > 2 else ""
-        pageCount = parts[2] if len(parts) > 3 else ""
-        startDate = parts[3] if len(parts) > 4 else ""
-        endDate = parts[4] if len(parts) > 5 else ""
+        author = parts[1] if len(parts) > 1 else ""
+        pageCount = parts[2] if len(parts) > 2 else ""
+        startDate = parts[3] if len(parts) > 3 else ""
+        endDate = parts[4] if len(parts) > 4 else ""
         data = load_data()
-        if username not in data:
+        if username not in data: #Not already registered
             data[username] = {'books': []}
         if any(book['title'] == title and book['author'] == author for book in data[username]['books']):
             raise Exception('You have already logged this book.')
+         #Add the book
         data[username]['books'].append({
-            'title': title,
-            'author': author,
-            'page count': pageCount,
-            'start date': startDate,
-            'end date': endDate
+        'title': title,
+        'author': author,
+        'page count': pageCount,
+        'start date': startDate,
+        'end date': endDate
         })
         save_data(data)
         await ctx.send(f"Book '{title}' added for user {username}.")
-        if endDate != '' and data[username]['reading goal deadline']:
+        if endDate != '' and 'reading goal deadline' in data[username]:
             deadline = data[username]['reading goal deadline']
             booksInDateRange = [book for book in data[username][books] if book['end date'][:7] == deadline[:7]]
-            if len(booksInDateRange) >= data[username]['reading goal']:
+            if len(booksInDateRange) >= int(data[username]['reading goal']):
                 randomCatPhoto = random.choice(catPhotos)
                 imagePath = os.path.join(catPhotosFolder, randomCatPhoto)
                 await ctx.send(f"{username} has reached their monthly reading goal! 🎉🎉🎉")
@@ -103,20 +104,20 @@ async def removeBook(ctx, *, args):
     try:
         parts = [p.strip() for p in args.split(',')]
         title = parts[0] 
-        if parts[1]:
+        if len(parts) == 2: #If author is specified
             author = parts[1]
         else:
-            author = ''
+            author = '' #If author is not specified
         data = load_data()
         username = ctx.author.name
         books = data[username]['books']
         candidateBooks = [book for book in books if book['title'] == title]
         if len(candidateBooks) == 1: #There's only one book with the same title
-            if candidateBooks[0]['author'] == author: #If the author matches
+            if candidateBooks[0]['author'] == author or author == '': #If the author matches or was not given
                 books.remove(candidateBooks[0])
                 save_data(data)
                 if title != '': #If there is an author
-                    await ctx.send(f"The book {title} by {author} has been removed from your booklog.")
+                    await ctx.send(f"The book {title} by {candidateBooks[0]['author']} has been removed from your booklog.")
                 else:
                     await ctx.send(f"The book {title} has been removed from your booklog.") #If there isn't one
             elif candidateBooks[0]['author'] != author: #If the author doesn't match
@@ -149,10 +150,21 @@ async def addReadingGoal(ctx, readingGoal):
         data[username]['reading goal'] = readingGoal
         today = datetime.today()
         last_day = calendar.monthrange(today.year, today.month)[1]
-        readingGoalDeadline = date(today.year, today.month, last_day)
+        readingGoalDeadline = date(today.year, today.month, last_day).isoformat()
         data[username]['reading goal deadline'] = readingGoalDeadline
         save_data(data)
-        await ctx.send(f'You will work toward reading {readingGoal} books by {readingGoalDeadline}.')
+        bookWord = 'book' if readingGoal == 1 else 'books'
+        await ctx.send(f'You will work toward reading {readingGoal} {bookWord} by {readingGoalDeadline}.')
+        booksInDateRange = [book for book in data[username]['books'] if book['end date'][:7] == readingGoalDeadline[:7]]
+        if len(booksInDateRange) >= int(data[username]['reading goal']):
+                randomCatPhoto = random.choice(catPhotos)
+                imagePath = os.path.join(catPhotosFolder, randomCatPhoto)
+                await ctx.send(f"{username} has reached their monthly reading goal! 🎉🎉🎉")
+                await ctx.send(file=discord.File(imagePath))
+                del data[username]['reading goal']
+                del data[username]['reading goal deadline']
+                save_data(data)
+                await ctx.send(f"The reading goal for this month has been removed. See you next month!")
     except Exception as e:
         await ctx.send(f"❌ {e}")
 
@@ -160,7 +172,7 @@ async def addReadingGoal(ctx, readingGoal):
 @bot.command(help = 'Get the number of books on your or someone else\'s book log.')
 async def getNumberofBooks(ctx, username = ''):
     """
-    Write either `!getNumberofBooks` to get the number of books in your own booklog or `!get NumberofBooks <username>` to get someone else's.
+    Write either `!getNumberofBooks` to get the number of books in your own booklog or `!getNumberofBooks <username>` to get someone else's.
     """
     if username == '':
         username = ctx.author.name
@@ -175,7 +187,7 @@ async def getNumberofBooks(ctx, username = ''):
 @bot.command(help = 'Get the number of books you or someone else has finished reading.')
 async def getNumberCompletedBooks(ctx, username = ''):
     """
-    Write either `!getNumberofBooks` to get the number of books you have read or `!get NumberofBooks <username>` for someone else.
+    Write either `!getNumberCompletedBooks` to get the number of books you have read or `!getNumberCompletedBooks <username>` for someone else.
     """
     if username == '':
         username = ctx.author.name
@@ -209,7 +221,7 @@ async def getBooks(ctx, username = ''):
                 messages.append(f" by {book['author']}")
             if book['page count']:
                 messages.append(f", with {book['page count']} pages")
-            messages.append(f".")
+            messages.append(f".\n\t")
             if book['start date'] and book['end date']:
                 messages.append(f"Started {book['start date']} and ended {book['end date']}.")
             elif book['start date']:
@@ -225,7 +237,7 @@ async def getBooks(ctx, username = ''):
 @bot.command(help = 'Add an author to a book title you have not previously done so to.')
 async def addAuthor(ctx, *, args):
     """
-        Add or overwrite the author of a book. Format as `!addAuthor <title>, <author>`, as in `!addAuthor The Idiot, Fyodor Dostoyevsky`.
+        Use  `!addAuthor <title> <author>` to set an author for a book. 
     """
     try:
         username = ctx.author.name
@@ -234,17 +246,17 @@ async def addAuthor(ctx, *, args):
         author = parts[1] 
         data = load_data()
         booksWithTitle = [d for d in data[username]['books'] if d['title'] == title]
-        if not booksWithTitle:
+        if len(booksWithTitle) ==0:
             raise Exception('No books by this title found.')
         if len(booksWithTitle) > 1:
-            raise Exception('Multiple books with this title. Cannot resolve.')
+            raise Exception('Multiple books found with this title.')
         old_author = booksWithTitle[0].get('author', '') #Saves the old author, giving an empty string if there isn't any.
         booksWithTitle[0]['author'] = author #Updates author
         save_data(data)
         if old_author:
-            await ctx.send(f"Changed author of '{title}' from {old_author} to {author}.")
+            await ctx.send(f"Changed the author of '{title}' from {old_author} to {author}.")
         else:
-            await ctx.send(f"Set author of '{title}' to {author}.")
+            await ctx.send(f"Set the author of '{title}' as {author}.")
     except Exception as e:
         await ctx.send(f"❌ {e}")
 
@@ -253,145 +265,171 @@ async def addStartDate(ctx, *, args):
     ''' Use either `!addStartDate <title> <startDate> <author>` or `!addStartDate <title> <startDate>` to set a day when you started reading a book.
     '''
     try:
+        username = ctx.author.name
         parts = [p.strip() for p in args.split(',')]
-        title = parts[0] 
-        startDate = parts[1] 
+        title = parts[0]
         if len(parts) == 3:
             author = parts[2]
-        else:
-            author = ''
-        username = ctx.author.name
+        if len(parts) >3 or len(parts) < 2:
+            raise Exception('Wrong number of arguments.')
+        startDate = parts[1]
         data = load_data()
         books = data[username]['books']
-        candidateBooks = [book for book in books if book['title'] == title]
-        if len(candidateBooks) == 1:
-            if author == '':
-                candidateBooks[0]['start date'] = startDate
+        CandidateBooks = [book for book in books if book['title'] == title]
+        if len(parts) == 2: #Did not input author
+            if len(CandidateBooks) == 0: #No books with this title
+                raise Exception('No book found with this title.')
+            elif len(CandidateBooks) > 1: #Multiple books with this title.
+                raise Exception('Multiple books found with this title. Please specify an author.')
+            elif len(CandidateBooks) == 1: #Exactly one book found. Update.
+                CandidateBooks[0]['start date'] = startDate
                 save_data(data)
-                await ctx.send(f"You started {title} on {startDate}.")
-            else:
-                if candidateBooks[0]['author'] == author:
-                    candidateBooks[0]['start date'] = startDate
+                await ctx.send(f'You started {title} on {startDate}.')
+        if len(parts) == 3: #Inputted author
+            if len(CandidateBooks) == 0: #No book with this title
+                raise Exception('No book found with this title.')
+            elif len(CandidateBooks) == 1:#One book with this title
+                if CandidateBooks[0]['author'] == author: #author matches
+                    CandidateBooks[0]['start date'] = startDate
                     save_data(data)
-                    await ctx.send(f"You started {title} by {author} on {startDate}.")
-                else:
-                    raise Exception('There is no book in your booklog with the specified title.')
-        elif len(candidateBooks) == 0:
-            raise Exception('There is no book in your booklog with the specified title.')
-        elif len(candidateBooks >1):
-            if author == '':
-                raise Exception('There are multiple books by that title. Please specify an author.')
-            else:
-                candidateBooksAuthors = [book for book in candidateBooks if book['author'] == author]
-                if len(candidateBooksAuthors) == 0:
-                    raise Exception('There is no book in your booklog with the specified title and author.')
-                if len(candidateBooksAuthors) == 1:
-                    candidateBooksAuthors[0]['start date'] = startDate
+                    await ctx.send(f'You started {title} on {startDate}')
+                elif CandidateBooks[0]['author'] == '': #author of book is missing
+                    CandidateBooks[0]['author'] = author #Fill in author
+                    CandidateBooks[0]['start date'] = startDate
                     save_data(data)
-                    await ctx.send(f"You started {title} by {author} on {startDate}")
-                if len(candidateBooksAuthors) > 1:
-                    raise Exception('There are somehow multiple books logged with the same title and author.')
+                    await ctx.send(f'Setting the author of {title} as {author}. \n You started it on {startDate}.')
+                else: #author doesn't match
+                    raise Exception(f'There is no book logged entitled {title} and written by {author}.')
+            elif len(CandidateBooks) >1: #Mutliple books with same title
+                CandidateBooksAuthors = [book for book in CandidateBooks if book['author'] == author] #Filter for books with the same author
+                if len(CandidateBooksAuthors) == 0: #Title-author combo doesn't match
+                    raise Exception(f'There is no book logged entitled {title} and written by {author}.')
+                elif len(CandidateBooksAuthors) == 1: #Title-author combo matches one book
+                    CandidateBooksAuthors[0]['start date'] = startDate
+                    save_data(data)
+                    await ctx.send(f'You started {title} by {author} on {startDate}.')
+                elif len(CandidateBooksAuthors) > 1: #Title-author combo matches multiple books
+                    raise Exception(f'There are multiple books logged entitled {title} and written by {author}.')
     except Exception as e:
         await ctx.send(f"❌ {e}")
 
 @bot.command(help = 'Add an ending date to a book in your booklog.')
-async def finishBook(ctx, *, args):
+async def addEndDate(ctx, *, args):
     """
-        Format `!finishBook <title>, <endDate>, <author>`.
-
-        Example: `!finishBook The Idiot, 2025-06-12, Fyodor Dostoyevsky`
+        Use either `!addEndDate <title> <endDate> <author>` or `!addEndDate <title> <endDate>` to set a day when you started reading a book.
     """
     try:
         username = ctx.author.name
         parts = [p.strip() for p in args.split(',')]
-        if len(parts) != 3:
-            raise Exception('Not the correct number of arguments.')
         title = parts[0]
+        if len(parts) == 3:
+            author = parts[2]
+        if len(parts) >3 or len(parts) < 2:
+            raise Exception('Wrong number of arguments.')
         endDate = parts[1]
-        author = parts[2]
         data = load_data()
-        candidates = [d for d in data[username]['books'] if d.get('title') == title]
-        if not candidates: #What happens if there is no book under that title
-            raise Exception('This book is not currently logged.')
-        titled = [d for d in candidates if d.get('author') == author] 
-        if not titled: #What happened if there is no titled book under that title
-            book = next(d for d in data[username]['books'] if d['title'] == title)
-            book['author'] = author
-            book['end date'] = endDate
-            msg = f"This book was not previously assigned an author. Assigning {author} and the end date {endDate}."
-        else: #Assign end date normally
-            book = titled[0]
-            book['end date'] = endDate
-            msg = f"You finished {title} on {endDate}. Congratulations!"
-        save_data(data)
-        if data[username]['reading goal deadline']:
+        books = data[username]['books']
+        CandidateBooks = [book for book in books if book['title'] == title]
+        if len(parts) == 2: #Did not input author
+            if len(CandidateBooks) == 0: #No books with this title
+                raise Exception('No book found with this title.')
+            elif len(CandidateBooks) > 1: #Multiple books with this title
+                raise Exception('Multiple books found with this title. Please specify an author.')
+            elif len(CandidateBooks) == 1: #Exactly one book with this title
+                CandidateBooks[0]['end date'] = endDate
+                save_data(data)
+                await ctx.send(f'You completed {title} on {endDate}.')
+        if len(parts) == 3: #Inputted author
+            if len(CandidateBooks) == 0: #No books with this title
+                raise Exception('No book found with this title.')
+            elif len(CandidateBooks) == 1: #One book with this title
+                if CandidateBooks[0]['author'] == author: #Author matches
+                    CandidateBooks[0]['end date'] = endDate
+                    save_data(data)
+                    await ctx.send(f'You completed {title} on {endDate}')
+                elif CandidateBooks[0]['author'] == '': #Author empty
+                    CandidateBooks[0]['author'] = author
+                    CandidateBooks[0]['end date'] = endDate
+                    save_data(data)
+                    await ctx.send(f'Setting the author of {title} as {author}. \n You completed it on {endDate}.')
+                else: #author doesn't match
+                    raise Exception(f'There is no book logged entitled {title} and written by {author}.')
+            elif len(CandidateBooks) >1:
+                CandidateBooksAuthors = [book for book in CandidateBooks if book['author'] == author]
+                if len(CandidateBooksAuthors) == 0: #No book matching title-author combo
+                    raise Exception(f'There is no book logged entitled {title} and written by {author}.')
+                elif len(CandidateBooksAuthors) == 1: #One book matching title-author combo
+                    CandidateBooksAuthors[0]['end date'] = endDate
+                    save_data(data)
+                    await ctx.send(f'You completed {title} by {author} on {endDate}.')
+                elif len(CandidateBooksAuthors) > 1: #Multiple books matching title-author combo
+                    raise Exception(f'There are multiple books logged entitled {title} and written by {author}.')
+        if 'reading goal deadline' in data[username]:
             deadline = data[username]['reading goal deadline']
-            booksInDateRange = [book for book in data[username][books] if book['end date'][:7] == deadline[:7]]
-            if len(booksInDateRange) >= data[username]['reading goal']:
+            booksInDateRange = [book for book in data[username]['books'] if book['end date'][:7] == deadline[:7]]
+            if len(booksInDateRange) >= int(data[username]['reading goal']): #Reading goal met
                 randomCatPhoto = random.choice(catPhotos)
                 imagePath = os.path.join(catPhotosFolder, randomCatPhoto)
                 await ctx.send(f"{username} has reached their monthly reading goal! 🎉🎉🎉")
                 await ctx.send(file=discord.File(imagePath))
-                del data[username]['reading goal']
+                del data[username]['reading goal'] #Clear reading goal data
                 del data[username]['reading goal deadline']
                 save_data(data)
                 await ctx.send(f"The reading goal for this month has been removed. See you next month!")
-        await ctx.send(msg)
     except Exception as e:
         await ctx.send(f"❌ {e}")
 
 @bot.command(help = 'Add a page count to a book in your booklog.')
 async def addPageCount(ctx, *, args):
     '''
-    Add the number of pages to a book using the command `!addPageCount <title>, <page count>` or `!addPageCount <title>, <page count>, <author>`
+    Use either `!addPageCount <title> <pageCount> <author>` or `!addStartDate <title> <pageCount>` to set the number of pages for a book.
     '''
     try:
+        username = ctx.author.name
         parts = [p.strip() for p in args.split(',')]
         title = parts[0]
-        pageCount = parts[1]
         if len(parts) == 3:
             author = parts[2]
-        else:
-            author = ''
-        username = ctx.author.name
+        if len(parts) >3 or len(parts) < 2:
+            raise Exception('Wrong number of arguments.')
+        pageCount = parts[1]
         data = load_data()
         books = data[username]['books']
-        candidateBooks = [book for book in books if book['title'] == title]
-        if len(candidateBooks) == 0: #No book by this title
-            raise Exception('There is no book by this title in your reading log.')
-        elif len(candidateBooks) == 1: #One book with this title
-            if candidateBooks[0]['author'] == '': #Book did not previously have an author
-                candidateBooks[0]['author'] = author
-                candidateBooks[0]['page count'] = pageCount
+        CandidateBooks = [book for book in books if book['title'] == title]
+        if len(parts) == 2: #Did not input author
+            if len(CandidateBooks) == 0: #No books with this title
+                raise Exception('No book found with this title.')
+            elif len(CandidateBooks) > 1: #Multiple books with this title.
+                raise Exception('Multiple books found with this title. Please specify an author.')
+            elif len(CandidateBooks) == 1: #Exactly one book found. Update.
+                CandidateBooks[0]['page count'] = startDate
                 save_data(data)
-                if author =='': #If the above did not assign a new author
-                    ctx.send(f"The book {title} has {pageCount} pages.")
-                else: #If it did
-                    ctx.send(f"The book {title} by {author} has {pageCount} pages.")
-            elif candidateBooks[0]['author'] != '': #The book has an author
-                if candidateBooks[0]['author'] != author: #The author does not match
-                    raise Exception('There is no book by this title with this author in your reading log.')
-                else: #The author does match
-                    candidateBooks[0]['page count'] = pageCount
+                await ctx.send(f'{title} has {pageCount} pages.')
+        if len(parts) == 3: #Inputted author
+            if len(CandidateBooks) == 0: #No book with this title
+                raise Exception('No book found with this title.')
+            elif len(CandidateBooks) == 1:#One book with this title
+                if CandidateBooks[0]['author'] == author: #author matches
+                    CandidateBooks[0]['page count'] = pageCount
                     save_data(data)
-                    ctx.send(f"The book {title} by {author} has {pageCount} pages.")
-        else: #Multiple books with this title
-            candidateBooksTitleAuthor = [book for book in candidateBooks if book['author'] == author]
-            if len(candidateBooksTitleAuthor) == 1: #One book with this title and author
-                candidateBooksTitleAuthor[0]['page count'] = pageCount
-                save_data(data)
-                ctx.send(f"The book {title} by {author} has {pageCount} pages.")
-            elif len(candidateBooksTitleAuthor) == 0: #No book with this title and author
-                candidateBooksNoAuthor = [book for book in candidateBooks if book['author'] == '']
-                if len(candidateBooksNoAuthor) == 1: #One book with this title and no author
-                    candidateBooksNoAuthor[0]['author'] = author
-                    candidateBooksNoAuthor[0]['page count'] = pageCount
+                    await ctx.send(f'{title} has {pageCount} pages.')
+                elif CandidateBooks[0]['author'] == '': #author of book is missing
+                    CandidateBooks[0]['author'] = author #Fill in author
+                    CandidateBooks[0]['page count'] = pageCount
                     save_data(data)
-                    ctx.send(f"The book {title} by {author} has {pageCount} pages.")
-                elif len(candidateBooksNoAuthor) == 0: #No book with this title and no author
-                    raise Exception('There are no books with this title and author in your reading log.')
-                elif len(candidateBooksNoAuthor) > 1:
-                    raise Exception('There are multiple books with this title and author in your reading log.')
+                    await ctx.send(f'Setting the author of {title} as {author}. \n It has {pageCount} pages.')
+                else: #author doesn't match
+                    raise Exception(f'There is no book logged entitled {title} and written by {author}.')
+            elif len(CandidateBooks) >1: #Mutliple books with same title
+                CandidateBooksAuthors = [book for book in CandidateBooks if book['author'] == author] #Filter for books with the same author
+                if len(CandidateBooksAuthors) == 0: #Title-author combo doesn't match
+                    raise Exception(f'There is no book logged entitled {title} and written by {author}.')
+                elif len(CandidateBooksAuthors) == 1: #Title-author combo matches one book
+                    CandidateBooksAuthors[0]['page count'] = pageCount
+                    save_data(data)
+                    await ctx.send(f' {title} by {author} has {startDate} pages.')
+                elif len(CandidateBooksAuthors) > 1: #Title-author combo matches multiple books
+                    raise Exception(f'There are multiple books logged entitled {title} and written by {author}.')
     except Exception as e:
         await ctx.send(f"❌ {e}")
 
@@ -400,4 +438,4 @@ async def addPageCount(ctx, *, args):
 async def on_ready():
     print(f"Bot logged in as {bot.user}")
 
-bot.run("")
+bot.run("") #Token for bot.
