@@ -23,9 +23,9 @@ This bot serves as an indexer of reading logs. Each member of the server can reg
 ### Update Commands (affects the user's own booklog)
 `!addAuthor <title> <author>` sets an author to the book with the specified title.
 
-`<title> <startDate> (<author>)` sets a starting date for the specified book.
+`!addStartDate <title> <startDate> (<author>)` sets a starting date for the specified book.
 
-`<title> <endDate> (<author>)` sets an ending date for the specified book.
+`!addEndDate <title> <endDate> (<author>)` sets an ending date for the specified book.
 
-`<title> <pageCount> (<author>)` sets a page count for the specified book.
+`!addPageCount <title> <pageCount> (<author>)` sets a page count for the specified book.
 
